@@ -1,0 +1,29 @@
+name: Cleanup Old Files
+
+on:
+schedule:
+- cron: '0 */6 * * *'
+workflow_dispatch:
+
+jobs:
+cleanup:
+runs-on: ubuntu-latest
+
+steps:
+  - name: Checkout Repo
+    uses: actions/checkout@v4
+
+  - name: Delete Files Older Than 1 Day
+    run: |
+      find releases -type f -mtime +1 -delete
+
+  - name: Commit Changes
+    run: |
+      git config user.name github-actions
+      git config user.email github-actions@github.com
+
+      git add .
+
+      git diff --cached --quiet || git commit -m "Auto cleanup old files"
+
+      git push
