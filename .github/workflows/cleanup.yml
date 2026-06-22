@@ -12,10 +12,38 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Dibutuhkan agar `git log` bisa membaca riwayat commit
 
       - name: Delete Files Older Than 1 Day
         run: |
-          find releases -type f -mtime +1 -delete
+          cd releases
+          NOW=$(date +%s)
+          for file in *.json; do
+            [ -f "$file" ] || continue
+
+            LAST_COMMIT=$(git log -1 --format=%ct -- "$file")
+
+            # Jika file baru dan belum di-commit, gunakan waktu modifikasi file sebagai fallback
+            if [ -z "$LAST_COMMIT" ]; then
+              LAST_COMMIT=$(stat -c %Y "$file")
+            fi
+
+            AGE=$((NOW - LAST_COMMIT))
+
+            if [ $AGE -gt 86400 ]; then
+              BASE="${file%.json}"
+
+              rm -f "${BASE}.apk"
+              rm -f "${BASE}.aab"
+              rm -f "${BASE}.zip"
+              rm -f "${BASE}.json"
+              rm -f "${BASE}-status.json"
+
+              echo "Deleted $BASE"
+            fi
+          done
+          cd ..
 
       - name: Commit Changes
         run: |
