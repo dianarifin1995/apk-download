@@ -5,7 +5,6 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
-# Menambahkan izin write agar github-actions bisa melakukan push kembali ke repo
 permissions:
   contents: write
 
@@ -17,14 +16,15 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Wajib agar git log bisa membaca riwayat commit lama
+          fetch-depth: 0
 
       - name: Delete Files Older Than 1 Day
         run: |
           cd releases
           NOW=$(date +%s)
+          
+          # --- STEP 1: Hapus berdasarkan umur berkas commit .json ---
           for file in *.json; do
-            # Lewati jika file berakhiran -status.json agar tidak diproses dua kali sebagai acuan
             if [[ "$file" == *-status.json ]]; then
               continue
             fi
@@ -33,7 +33,6 @@ jobs:
 
             LAST_COMMIT=$(git log -1 --format=%ct -- "$file")
 
-            # Fallback jika file belum pernah di-commit, gunakan waktu modifikasi file
             if [ -z "$LAST_COMMIT" ]; then
               LAST_COMMIT=$(stat -c %Y "$file")
             fi
@@ -43,16 +42,26 @@ jobs:
             if [ $AGE -gt 86400 ]; then
               BASE="${file%.json}"
 
-              # Menghapus semua variasi berkas terkait
               rm -f "${BASE}.apk"
               rm -f "${BASE}.aab"
               rm -f "${BASE}.zip"
               rm -f "${BASE}.json"
               rm -f "${BASE}-status.json"
 
-              echo "Deleted $BASE and its status file"
+              echo "Deleted paired files for: $BASE"
             fi
           done
+
+          # --- STEP 2: Sapu bersih file Orphan (tanpa pasangan .json) ---
+          # Menggunakan mtime +1 (lebih dari 24 jam sejak modifikasi terakhir)
+          echo "Cleaning up orphan files..."
+          find . -type f -name "*.apk" -mtime +1 -delete
+          find . -type f -name "*.aab" -mtime +1 -delete
+          find . -type f -name "*.zip" -mtime +1 -delete
+          
+          # Opsional: Sekaligus membersihkan file ".json" rusak yang Anda sebutkan
+          find . -type f -name ".json" -delete 
+
           cd ..
 
       - name: Commit Changes
@@ -63,6 +72,6 @@ jobs:
           git add .
 
           if ! git diff --cached --quiet; then
-            git commit -m "Auto cleanup old files"
+            git commit -m "Auto cleanup old files and orphans"
             git push
           fi
